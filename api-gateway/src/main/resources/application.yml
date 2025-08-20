@@ -1,0 +1,54 @@
+server:
+  port: 4004
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.burstCapacity: 5
+                redis-rate-limiter.replenishRate: 5
+                key-resolver: "#{@ipKeyResolver}"
+
+          routes:
+            ## http://localhost:4004/auth/login
+            ## http://auth-service:4005/login
+            - id: auth-service-route
+              uri: http://auth-service:4005
+              predicates:
+                - Path=/auth/**
+              filters:
+                - StripPrefix=1
+            # Route for /api/patients/** to patient-service
+            ## REST CLIENT -> http://localhosy:4004/patients
+            ## API Gateway -> http://patient-service:4000/patients
+            ## PATIENT SERVICE (SPRING BOOT APP) -> /patients  ->Patients Array
+            - id: patient-service-route
+              uri: http://patient-service:4000
+              predicates:
+                - Path=/api/patients/**
+              filters:
+                - StripPrefix=1
+                - JwtValidation
+
+            # Route for /api/docs/patients to patient-service /v3/api-docs
+            - id: api-docs-patient-route
+              uri: http://patient-service:4000
+              predicates:
+                - Path=/api-docs/patients
+              filters:
+                - RewritePath=/api-docs/patients,/v3/api-docs
+
+            - id: api-doc-auth-route
+              uri: http://auth-service:4005
+              predicates:
+                - Path=/api-docs/auth
+              filters:
+                - RewritePath=/api-docs/auth,/v3/api-docs
